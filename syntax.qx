@@ -1,0 +1,45 @@
+import builtins ```Basic import necessary for executing code```
+
+set a to to_int(input("Enter num1 : ")) ```Variable decleration and assignment using input statement```
+set b to to_int(input("Enter num1 : ")) ```Variable decleration and assignment using input statement```
+set add to a+b ```Variable decleration and assignment```
+set sub to a-b
+set mul to a*b
+if b = 0 begin ```If statement```
+    set div to "Zero Division Error !"
+elsif b=1 begin ```Else if statement```
+    set div to "same as num2"
+else begin ```Else statement```
+    set div to a/b
+end
+output("Add : ",add)
+output("Sub : ",sub)
+output("Mul : ",mul)
+output("Div : ",div)
+
+set ran to range(1,20) ```usage of range function```
+output("Range : ",ran) ```Printing statement```
+
+set list1 to [1,2,3,4,5,6,7,8,9] ``` list decleration```
+set tup1 to tup(list1) ```list to tuple conversion```
+output("Tuple : ",tup1)
+for i in tup1 begin ```for loop```
+    output(i)
+    set f to fopen("testsyntax.txt","w") ``` opening file for operations```
+    store(f,"Hello, World ! from QuantumX") ```writing to opened file```
+end
+
+output("before list appending : ",list1)
+set list1 to append(list1,10) ```appending to list```
+output("after list appending : ",list1)
+
+set list1 to set_at(list1, 1, 10) ```inserting at custom place in list```
+output("After set_at: ", list1)
+
+set last_item to pop(list1) ```removing last item from list```
+output("Item popped : ",last_item)
+output("After popping : ",list1)
+
+set det to about()
+
+output(det)
