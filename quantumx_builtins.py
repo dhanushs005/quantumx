@@ -1,8 +1,48 @@
 # quantumx_builtins.py
 from builtins import input as builtin_input, range as builtin_range
 import os
+import numpy as np
+import pandas as pd
+
 
 DEBUG_ENABLED = False
+lst = list()
+tup = tuple()
+dic = dict()
+integer = 0
+string = ""
+
+def char(*elem):
+    try:
+        for e in elem:
+            lst.append(chr(e))
+        return lst
+    except:
+        return "Error ocurred at char()"
+def ascii(elem):
+    lst = list()
+    try:
+        if type(elem)==type(string):
+            l = len(elem)
+            for e in elem:
+                lst.append(ord(e))
+            return lst
+        else:
+            return ord(elem)
+    except:
+        return("Error ocurred at  ascii() ")
+
+
+def type_of(elem):
+    if isinstance(elem, np.ndarray):  # Check if elem is an instance of numpy.ndarray
+        return "<class 'array'>"
+    else:
+        return type(elem)
+
+
+def array(elem):
+    elem = np.array(elem)
+    return elem
 
 def about():
     Name = "QuantumX"
@@ -16,12 +56,27 @@ def about():
 
 def debug(*args):
     """Print debug messages if DEBUG_ENABLED is True."""
-    if DEBUG_ENABLED:
+    if DEBUG_ENABLED == True:
         print("DEBUG:", " ".join(str(arg) for arg in args))
 
 def output(*args):
-    """Print arguments with spaces between them."""
-    print(" ".join(str(arg) for arg in args))
+    """
+    Print arguments with spaces between them. If an argument is a callable (function),
+    execute it and use its return value; otherwise, use the argument as-is.
+    """
+    processed_args = []
+    for arg in args:
+        if callable(arg):
+            # If the argument is a function/callable, call it and append the result
+            try:
+                result = arg()
+                processed_args.append(str(result))
+            except Exception as e:
+                processed_args.append(f"<Error calling {arg.__name__}: {e}>")
+        else:
+            # If not callable, append the argument as-is
+            processed_args.append(str(arg))
+    print(" ".join(processed_args))
 
 def add(a, b):
     """Return the sum of two numbers."""
@@ -207,5 +262,9 @@ builtins = {
     "max": max_val,
     "min": min_val,
     "close": close,
-    "about":about
+    "about":about,
+    "array":array,
+    "type_of":type_of,
+    "ascii":ascii,
+    "char":char
 }
