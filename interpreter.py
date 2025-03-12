@@ -20,7 +20,6 @@ class Lexer:
             (r'//.*', 'COMMENT'),
             (r'```(?:.*?```|$)', None),
             (r'\bset\b', 'SET'),
-            (r'\bto\b', 'TO'),
             (r'\bimport\b', 'IMPORT'),
             (r'\bfunc\b', 'FUNC'),
             (r'\bbegin\b', 'BEGIN'),
@@ -36,10 +35,11 @@ class Lexer:
             (r'\bin\b', 'IN'),
             (r'\bif\b', 'IF'),
             (r'\belsif\b', 'ELSIF'),
-            (r'[0-9]+', 'NUMBER'),
+            (r'-?[0-9]+', 'NUMBER'),  # Updated to support negative numbers
             (r'[a-zA-Z_][a-zA-Z0-9_]*', 'IDENTIFIER'),
-            (r'[-+*/]', 'OPERATOR'),
-            (r'[><=]', 'COMPARISON'),
+            (r'=', 'OPERATOR'),  # Explicitly match = as OPERATOR
+            (r'[-+*/]', 'OPERATOR'),  # Other operators
+            (r'[><]', 'COMPARISON'),  # Adjusted to exclude =
             (r',', 'COMMA'),
             (r'\(', 'LPAREN'),
             (r'\)', 'RPAREN'),
@@ -131,8 +131,11 @@ class Parser:
     def parse_variable(self) -> Node:
         self.consume('SET')
         var_name = self.consume('IDENTIFIER').value
-        self.consume('TO')
-        expr = self.parse_expression_or_call()
+        if self.current_token() and self.current_token().type == 'LBRACKET':
+            expr = self.parse_index(var_name)
+        else:
+            self.consume('OPERATOR')  # Consume '='
+            expr = self.parse_expression_or_call()
         return Node('Variable', var_name, [expr])
 
     def parse_function(self) -> Node:
@@ -142,7 +145,8 @@ class Parser:
         params = []
         if self.current_token().type != 'RPAREN':
             params.append(self.consume('IDENTIFIER').value)
-            while self.current_token().type == 'IDENTIFIER':
+            while self.current_token().type == 'COMMA':
+                self.consume('COMMA')
                 params.append(self.consume('IDENTIFIER').value)
         self.consume('RPAREN')
         self.consume('BEGIN')
@@ -176,7 +180,6 @@ class Parser:
         if_block = []
         while self.current_token() and self.current_token().type not in ['ELSIF', 'ELSE', 'END']:
             if_block.append(self.parse_statement())
-
         elsif_blocks = []
         while self.current_token() and self.current_token().type == 'ELSIF':
             self.consume('ELSIF')
@@ -186,14 +189,12 @@ class Parser:
             while self.current_token() and self.current_token().type not in ['ELSIF', 'ELSE', 'END']:
                 elsif_body.append(self.parse_statement())
             elsif_blocks.append(Node('Elsif', None, [elsif_condition, Node('Block', None, elsif_body)]))
-
         else_block = []
         if self.current_token() and self.current_token().type == 'ELSE':
             self.consume('ELSE')
-            self.consume('BEGIN')  # Fixed: Expect BEGIN after ELSE
+            self.consume('BEGIN')
             while self.current_token() and self.current_token().type != 'END':
                 else_block.append(self.parse_statement())
-
         self.consume('END')
         return Node('If', None, [
             condition,
@@ -241,7 +242,7 @@ class Parser:
         self.consume('LPAREN')
         args = []
         while self.current_token() and self.current_token().type != 'RPAREN':
-            args.append(self.parse_expression())
+            args.append(self.parse_expression_or_call())  # Use expression_or_call for nested calls
             if self.current_token() and self.current_token().type == 'COMMA':
                 self.consume('COMMA')
         self.consume('RPAREN')
@@ -268,11 +269,18 @@ class Parser:
         module_name = self.consume('IDENTIFIER').value
         return Node('Import', module_name)
 
+    def parse_index(self, var_name: str) -> Node:
+        self.consume('LBRACKET')
+        index = self.parse_expression()
+        self.consume('RBRACKET')
+        return Node('Index', None, [Node('Identifier', var_name), index])
+
     def parse_expression_or_call(self) -> Node:
         token = self.current_token()
-        if (token.type == 'IDENTIFIER' or token.type == 'INPUT') and self.pos + 1 < len(self.tokens) and self.tokens[self.pos + 1].type == 'LPAREN':
+        if token and (token.type == 'IDENTIFIER' or token.type == 'INPUT') and self.pos + 1 < len(self.tokens) and self.tokens[self.pos + 1].type == 'LPAREN':
+            func_name = token.value
             self.pos += 1
-            return self.parse_call(token.value)
+            return self.parse_call(func_name)
         return self.parse_expression()
 
     def parse_call(self, func_name: str) -> Node:
@@ -280,7 +288,7 @@ class Parser:
         args = []
         while self.current_token() and self.current_token().type != 'RPAREN':
             if self.current_token().type in ['NUMBER', 'STRING', 'IDENTIFIER', 'LPAREN', 'LBRACKET']:
-                args.append(self.parse_expression())
+                args.append(self.parse_expression_or_call())  # Use expression_or_call for nested calls
             elif self.current_token().type == 'INPUT':
                 self.pos += 1
                 if self.current_token() and self.current_token().type == 'LPAREN':
@@ -296,6 +304,8 @@ class Parser:
 
     def parse_expression(self) -> Node:
         left = self.parse_term()
+        while self.current_token() and self.current_token().type == 'LBRACKET':
+            left = self.parse_index(left.value if left.type == 'Identifier' else left)
         while self.current_token() and self.current_token().type in ['OPERATOR', 'COMPARISON']:
             op = self.consume(self.current_token().type).value
             right = self.parse_term()
@@ -341,6 +351,8 @@ class Interpreter:
             'fopen': lambda filename, mode: open(filename, mode),
             'store': lambda file, text: file.write(text) or None
         })
+        # Default import of builtins
+        self.builtins.update(builtin_functions)
 
     def debug(self, *args):
         if 'debug' in self.builtins:
@@ -406,7 +418,7 @@ class Interpreter:
             if 'output' in self.builtins:
                 self.builtins['output'](*args)
             else:
-                print("Error: 'output' function not imported")
+                print(" ".join(str(arg) for arg in args))
         elif node.type == 'Input':
             args = [self.evaluate(arg) for arg in node.children[0].children]
             if 'input' in self.builtins:
@@ -479,11 +491,43 @@ def run_quantumx_file(filename: str):
     interpreter = Interpreter()
     interpreter.interpret(ast)
 
+def run_repl():
+    print("QuantumX REPL - Type 'exit' or 'quit' to quit.")
+    print("Builtins are imported by default.")
+    interpreter = Interpreter()
+    while True:
+        try:
+            code = input(">>> ")
+            if code.lower() in ['exit', 'quit']:
+                print("Exiting QuantumX REPL...")
+                break
+            if not code.strip():
+                continue
+            lexer = Lexer(code)
+            tokens = lexer.tokenize()
+            parser = Parser(tokens)
+            ast = parser.parse()
+            for node in ast:
+                result = interpreter.execute(node)
+                if result is not None:
+                    print(result)
+        except SyntaxError as e:
+            print(f"SyntaxError: {e}")
+        except NameError as e:
+            print(f"NameError: {e}")
+        except Exception as e:
+            print(f"Error: {e}")
+
 def main():
-    if len(sys.argv) != 2:
-        print("Usage: quantumx <filename.qx>")
+    if len(sys.argv) == 1:
+        # No arguments, run REPL
+        run_repl()
+    elif len(sys.argv) == 2:
+        # One argument, run the .qx file
+        run_quantumx_file(sys.argv[1])
+    else:
+        print("Usage: quantumx [<filename.qx>]")
         sys.exit(1)
-    run_quantumx_file(sys.argv[1])
 
 if __name__ == "__main__":
     main()
